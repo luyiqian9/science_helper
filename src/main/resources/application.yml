@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: science_helper
+  data:
+    redis:
+      host: 127.0.0.1
+      database: 2
+  ai:
+    vectorstore:
+      redis:
+        index-name: spring_ai_index   # 向量库索引名
+        initialize-schema: true   # 是否初始化向量库索引结构
+        prefix: "doc:"    # 向量库 key 前缀
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        model: deepseek-r1:1.5b
+    openai:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: qwen-max-latest
+          parallel-tool-calls: false
+      embedding:
+        options:
+          model: text-embedding-v3
+          dimensions: 1024
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/hm_llm?serverTimezone=Asia/Shanghai&useSSL=false&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&tinyInt1isBit=false&allowPublicKeyRetrieval=true&allowMultiQueries=true&useServerPrepStmts=false
+    username: root
+    password: ${MYSQL_PASSWORD}
+
+logging:
+  level:
+    org.springframework.ai: debug
+    com.science.ai: debug
+

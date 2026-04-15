@@ -1,5 +1,6 @@
 package com.science.ai.controller;
 
+import com.science.ai.constants.RoleTypeConstants;
 import com.science.ai.entity.vo.MessageVo;
 import com.science.ai.repository.ChatHistoryRepo;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,9 @@ public class ChatHistoryController {
      */
     @GetMapping("/{type}")
     public List<String> getChatIds(@PathVariable("type") String type) {
+        // TODO 前端未修改type 默认只会为 chat 所以在这里修改为 editor 测试 不然无法查询到聊天记录
+        type = RoleTypeConstants.REVIEWER;
+
         return chatHistoryRepo.queryChatIds(type);
     }
 
@@ -47,6 +51,9 @@ public class ChatHistoryController {
      */
     @GetMapping("/{type}/{chatId}")
     public List<MessageVo> queryChatHistory(@PathVariable("type") String type, @PathVariable("chatId") String chatId) {
+        // TODO 前端未修改type 默认只会为 chat 所以在这里修改为 editor 测试 不然无法查询到聊天记录
+        type = RoleTypeConstants.REVIEWER;
+
         String conversationKey = buildConversationKey(type, chatId);
         List<Message> messages = chatMemory.get(conversationKey);
         if (messages.isEmpty()) {

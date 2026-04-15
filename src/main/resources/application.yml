@@ -20,7 +20,7 @@ spring:
       api-key: ${OPENAI_API_KEY}
       chat:
         options:
-          model: qwen-max-latest
+          model: qwen3-max-2025-09-23
           parallel-tool-calls: false
       embedding:
         options:

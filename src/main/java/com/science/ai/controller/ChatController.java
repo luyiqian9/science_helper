@@ -47,7 +47,7 @@ public class ChatController {
         String normalizedType = type == null ? TYPE : type.trim();
 
         // TODO 前端未修改type 默认只会为 chat 所以在这里修改为 editor 测试
-        normalizedType = RoleTypeConstants.REVIEWER;
+        normalizedType = RoleTypeConstants.EDITOR;
 
         // 关键步骤2：type=chat 走原聊天链路；其他 type 直接交由策略上下文服务动态路由。
         if (TYPE.equals(normalizedType)) {

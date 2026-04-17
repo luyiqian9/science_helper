@@ -1,6 +1,6 @@
 package com.science.ai.controller;
 
-import com.science.ai.repository.ChatHistoryRepo;
+import com.science.ai.repository.redis.ChatHistoryRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;

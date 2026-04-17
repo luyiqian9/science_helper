@@ -1,4 +1,4 @@
-package com.science.ai.service;
+package com.science.ai.service.funcall;
 
 import com.science.ai.entity.po.CourseReservation;
 import com.baomidou.mybatisplus.extension.service.IService;

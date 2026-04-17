@@ -1,8 +1,8 @@
-package com.science.ai.repository;
+package com.science.ai.repository.redis;
 
+import com.science.ai.service.archive.ChatArchiveFacadeService;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -32,9 +32,12 @@ public class RedisChatHistoryRepo implements ChatHistoryRepo {
     private static final String KEY_PREFIX = "ai:chat:ids:";
 
     private final StringRedisTemplate redisTemplate;
+    private final ChatArchiveFacadeService chatArchiveFacadeService;
 
-    public RedisChatHistoryRepo(StringRedisTemplate redisTemplate) {
+    public RedisChatHistoryRepo(StringRedisTemplate redisTemplate,
+                                ChatArchiveFacadeService chatArchiveFacadeService) {
         this.redisTemplate = redisTemplate;
+        this.chatArchiveFacadeService = chatArchiveFacadeService;
     }
 
     /**
@@ -42,6 +45,7 @@ public class RedisChatHistoryRepo implements ChatHistoryRepo {
      * 1) 组装 zset key = ai:chat:ids:{type}；
      * 2) 先查 score 判断 chatId 是否已存在；
      * 3) 仅首次出现时写入 score=首次保存时间戳。
+     * 4) Redis 成功后按 fail-safe 策略补充 MySQL 会话索引归档。
      * 异常处理：Redis 异常交由上层统一处理，不吞异常。
      * 为什么 score 定义为首次保存时间戳：
      * - 满足“save 幂等去重”，重复 save 不改 score；
@@ -63,6 +67,9 @@ public class RedisChatHistoryRepo implements ChatHistoryRepo {
         // 对应 Redis: ZADD key NX score member
         // 含义：仅当 member 不存在时写入；存在则不更新 score（保留首次时间）
         redisTemplate.opsForZSet().addIfAbsent(key, normalizedChatId, firstSavedAt);
+
+        // 门面接管归档策略：统一处理开关、默认 userId 与 fail-safe。
+        chatArchiveFacadeService.saveSessionIndexFailSafe(normalizedType, normalizedChatId);
     }
 
     /**

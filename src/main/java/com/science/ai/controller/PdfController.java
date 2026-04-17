@@ -1,8 +1,8 @@
 package com.science.ai.controller;
 
 import com.science.ai.entity.vo.Result;
-import com.science.ai.repository.ChatHistoryRepo;
-import com.science.ai.repository.FileRepo;
+import com.science.ai.repository.redis.ChatHistoryRepo;
+import com.science.ai.repository.other.FileRepo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;

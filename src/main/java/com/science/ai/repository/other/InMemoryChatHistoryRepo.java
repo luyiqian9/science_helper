@@ -1,11 +1,11 @@
-package com.science.ai.repository;
+package com.science.ai.repository.other;
 
-import org.springframework.stereotype.Component;
+import com.science.ai.repository.redis.ChatHistoryRepo;
 
 import java.util.*;
 
 //@Component
-public class InMemoryChatHistoryRepo implements ChatHistoryRepo{
+public class InMemoryChatHistoryRepo implements ChatHistoryRepo {
 
     private final Map<String, List<String>> chatHistory = new HashMap<>();
 

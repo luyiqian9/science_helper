@@ -2,7 +2,7 @@ package com.science.ai.controller;
 
 import com.science.ai.constants.RoleTypeConstants;
 import com.science.ai.entity.vo.MessageVo;
-import com.science.ai.repository.ChatHistoryRepo;
+import com.science.ai.repository.redis.ChatHistoryRepo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;

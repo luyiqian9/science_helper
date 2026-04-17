@@ -1,6 +1,6 @@
 package com.science.ai.service.chat.impl;
 
-import com.science.ai.repository.ChatHistoryRepo;
+import com.science.ai.repository.redis.ChatHistoryRepo;
 import com.science.ai.service.chat.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;

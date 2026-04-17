@@ -1,6 +1,8 @@
-package com.science.ai.repository;
+package com.science.ai.repository.redis;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.science.ai.repository.mysql.ChatArchiveRepository;
+import com.science.ai.service.archive.ChatArchiveFacadeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
@@ -43,10 +45,14 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final ChatArchiveFacadeService chatArchiveFacadeService;
 
-    public RedisChatMemoryRepository(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
+    public RedisChatMemoryRepository(StringRedisTemplate redisTemplate,
+                                     ObjectMapper objectMapper,
+                                     ChatArchiveFacadeService chatArchiveFacadeService) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.chatArchiveFacadeService = chatArchiveFacadeService;
     }
 
     /**
@@ -112,6 +118,7 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
      * 2) 对完全重复消息进行去重，降低重试写入导致的冗余。
      * 3) 执行窗口 trim，仅保留最近 20 条。
      * 4) 将每条消息序列化为单条 JSON，并按时间顺序 RPUSH 到 Redis List。
+     * 5) Redis 写入成功后，按 fail-safe 策略异步语义双写 MySQL 归档（异常只记日志，不影响主链路）。
      * 异常处理：JSON 序列化失败时抛 IllegalStateException，避免写入不完整数据。
      */
     @Override
@@ -146,6 +153,10 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
             // 相当于redis命令 rpush redisKey messageJsonList
             redisTemplate.opsForList().rightPushAll(redisKey, messageJsonList);
 
+            // 双写顺序：先写 Redis（主链路记忆源），再写 MySQL（完整归档），避免归档成功但记忆缺失。
+            // 注意：归档使用未裁剪去重快照，确保历史可累积；Redis 仍保持窗口语义不变。
+            archiveToMysqlFailSafe(conversationKey, deduplicated);
+
 /*            for (String messageJson : messageJsonList) {
                  相当于redis命令 rpush redisKey messageJson
                 redisTemplate.opsForList().rightPush(redisKey, messageJson);
@@ -154,6 +165,63 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize chat messages to redis", e);
         }
+    }
+
+    /**
+     * 关键步骤：
+     * 1) 将 StoredMessage 转换为归档载荷；
+     * 2) 调用归档仓储写入 MySQL。
+     * 异常处理：采用 fail-safe 策略，归档异常只记录 error，不中断聊天主流程。
+     */
+    private void archiveToMysqlFailSafe(String conversationKey, List<StoredMessage> messages) {
+        if (messages.isEmpty()) {
+            return;
+        }
+
+        // 门面接管归档策略：统一处理开关、默认 userId 与 fail-safe，仓储层只负责数据转换和调用。
+        List<ChatArchiveRepository.ArchiveMessagePayload> payloads = toArchivePayloads(messages);
+        chatArchiveFacadeService.archiveMessagesFailSafe(conversationKey, payloads);
+    }
+
+    /**
+     * 关键步骤：
+     * 1) metadata 序列化为 JSON，保留未来扩展字段；
+     * 2) 生成 contentJson 结构，兼容后续多模态/content 扩展；
+     * 3) tool 相关字段先从 metadata 中提取，未命中时保持 null。
+     * 异常处理：JSON 序列化失败抛 IllegalStateException，避免写入不一致归档数据。
+     */
+    private List<ChatArchiveRepository.ArchiveMessagePayload> toArchivePayloads(List<StoredMessage> messages) {
+        List<ChatArchiveRepository.ArchiveMessagePayload> payloads = new ArrayList<>(messages.size());
+        for (StoredMessage message : messages) {
+            try {
+                String metadataJson = objectMapper.writeValueAsString(
+                        message.metadata() == null ? Collections.emptyMap() : message.metadata());
+
+                Map<String, Object> content = new LinkedHashMap<>();
+                content.put("text", message.text());
+                // 序列化 contentJson：即使当前仅文本，也统一结构化存储，方便未来多模态扩展。
+                String contentJson = objectMapper.writeValueAsString(content);
+
+                Map<String, Object> metadata = message.metadata() == null
+                        ? Collections.emptyMap()
+                        : message.metadata();
+
+                payloads.add(new ChatArchiveRepository.ArchiveMessagePayload(
+                        message.messageType(),
+                        message.text(),
+                        message.createdAt(),
+                        metadataJson,
+                        "TEXT",
+                        contentJson,
+                        metadata.get("toolName") == null ? null : String.valueOf(metadata.get("toolName")),
+                        metadata.get("toolCallId") == null ? null : String.valueOf(metadata.get("toolCallId")),
+                        metadata.get("toolArgumentsJson") == null ? null : String.valueOf(metadata.get("toolArgumentsJson"))
+                ));
+            } catch (JsonProcessingException ex) {
+                throw new IllegalStateException("Failed to serialize archive payload", ex);
+            }
+        }
+        return payloads;
     }
 
     /**
@@ -311,7 +379,7 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
         return result;
     }
 
-    // trim：仅保留最新 50 条消息
+    // trim：仅保留最新 20 条消息
     private List<StoredMessage> trimToLatest(List<StoredMessage> source) {
         if (source.size() <= MAX_MESSAGES) {
             return source;

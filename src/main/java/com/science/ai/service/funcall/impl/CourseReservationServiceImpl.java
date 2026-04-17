@@ -1,8 +1,8 @@
-package com.science.ai.service.impl;
+package com.science.ai.service.funcall.impl;
 
 import com.science.ai.entity.po.CourseReservation;
 import com.science.ai.mapper.CourseReservationMapper;
-import com.science.ai.service.ICourseReservationService;
+import com.science.ai.service.funcall.ICourseReservationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
 

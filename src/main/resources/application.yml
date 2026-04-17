@@ -37,3 +37,9 @@ logging:
     org.springframework.ai: debug
     com.science.ai: debug
 
+app:
+  chat:
+    archive:
+      mysql-enabled: true
+      default-user-id: anonymous
+

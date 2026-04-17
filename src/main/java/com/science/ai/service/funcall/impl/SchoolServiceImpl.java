@@ -1,8 +1,8 @@
-package com.science.ai.service.impl;
+package com.science.ai.service.funcall.impl;
 
 import com.science.ai.entity.po.School;
 import com.science.ai.mapper.SchoolMapper;
-import com.science.ai.service.ISchoolService;
+import com.science.ai.service.funcall.ISchoolService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
 

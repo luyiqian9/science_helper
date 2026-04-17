@@ -1,4 +1,4 @@
-package com.science.ai.repository;
+package com.science.ai.repository.other;
 
 import org.springframework.core.io.Resource;
 

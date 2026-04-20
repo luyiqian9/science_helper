@@ -3,6 +3,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.science.ai.repository.mysql.ChatArchiveRepository;
 import com.science.ai.service.archive.ChatArchiveFacadeService;
+import com.science.ai.service.chat.ChatMemorySummarizer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
@@ -40,19 +41,20 @@ import java.util.Set;
 public class RedisChatMemoryRepository implements ChatMemoryRepository {
 
     private static final String KEY_PREFIX = "ai:chat:msgs:";
-    // 仅保留最近 20 条消息
-    private static final int MAX_MESSAGES = 20;
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final ChatArchiveFacadeService chatArchiveFacadeService;
+    private final ChatMemorySummarizer chatMemorySummarizer;
 
     public RedisChatMemoryRepository(StringRedisTemplate redisTemplate,
                                      ObjectMapper objectMapper,
-                                     ChatArchiveFacadeService chatArchiveFacadeService) {
+                                     ChatArchiveFacadeService chatArchiveFacadeService,
+                                     ChatMemorySummarizer chatMemorySummarizer) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.chatArchiveFacadeService = chatArchiveFacadeService;
+        this.chatMemorySummarizer = chatMemorySummarizer;
     }
 
     /**
@@ -116,9 +118,9 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
      * 关键步骤：
      * 1) 将 Message 序列化为固定字段（messageType/text/createdAt/metadata）。
      * 2) 对完全重复消息进行去重，降低重试写入导致的冗余。
-     * 3) 执行窗口 trim，仅保留最近 20 条。
-     * 4) 将每条消息序列化为单条 JSON，并按时间顺序 RPUSH 到 Redis List。
-     * 5) Redis 写入成功后，按 fail-safe 策略异步语义双写 MySQL 归档（异常只记日志，不影响主链路）。
+     * 3) 将每条消息序列化为单条 JSON，并按时间顺序 RPUSH 到 Redis List。
+     * 4) Redis 写入成功后，按 fail-safe 策略双写 MySQL 归档（异常只记日志，不影响主链路）。
+     * 5) 异步触发滚动摘要压缩，避免同步阻塞请求。
      * 异常处理：JSON 序列化失败时抛 IllegalStateException，避免写入不完整数据。
      */
     @Override
@@ -136,13 +138,11 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
         List<StoredMessage> serialized = messages.stream().map(this::toStoredMessage).toList();
         // 去重：按消息关键字段去重，避免同一条消息因重试重复入库。
         List<StoredMessage> deduplicated = deduplicate(serialized);
-        // trim：与 MessageWindowChatMemory 对齐，仅保留最近 20 条消息。
-        List<StoredMessage> trimmed = trimToLatest(deduplicated);
 
         try {
             // 序列化：每条消息单独转成 JSON，后续按 list 逐条写入。
-            List<String> messageJsonList = new ArrayList<>(trimmed.size());
-            for (StoredMessage storedMessage : trimmed) {
+            List<String> messageJsonList = new ArrayList<>(deduplicated.size());
+            for (StoredMessage storedMessage : deduplicated) {
                 messageJsonList.add(objectMapper.writeValueAsString(storedMessage));
             }
 
@@ -154,13 +154,18 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
             redisTemplate.opsForList().rightPushAll(redisKey, messageJsonList);
 
             // 双写顺序：先写 Redis（主链路记忆源），再写 MySQL（完整归档），避免归档成功但记忆缺失。
-            // 注意：归档使用未裁剪去重快照，确保历史可累积；Redis 仍保持窗口语义不变。
             archiveToMysqlFailSafe(conversationKey, deduplicated);
 
 /*            for (String messageJson : messageJsonList) {
                  相当于redis命令 rpush redisKey messageJson
                 redisTemplate.opsForList().rightPush(redisKey, messageJson);
             }*/
+
+            // 滚雪球摘要算法(Rolling Summarization): 独立Service规避AOP失效，融合历史摘要与最老对话，实现无限上下文记忆。
+            // 仅当最后一条为 AssistantMessage（本轮闭环完成）时才触发压缩，避免 UserMessage 半闭环阶段误压缩。
+            if (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof AssistantMessage) {
+                chatMemorySummarizer.compressHistory(conversationKey, new ArrayList<>(messages));
+            }
 
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize chat messages to redis", e);
@@ -379,13 +384,6 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
         return result;
     }
 
-    // trim：仅保留最新 20 条消息
-    private List<StoredMessage> trimToLatest(List<StoredMessage> source) {
-        if (source.size() <= MAX_MESSAGES) {
-            return source;
-        }
-        return source.subList(source.size() - MAX_MESSAGES, source.size());
-    }
 
     // 存储消息的记录类
     private record StoredMessage(String messageType, String text, String createdAt, Map<String, Object> metadata) {

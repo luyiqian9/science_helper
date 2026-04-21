@@ -5,6 +5,8 @@ import com.science.ai.repository.mysql.ChatArchiveRepository;
 import com.science.ai.service.archive.ChatArchiveFacadeService;
 import com.science.ai.service.chat.ChatMemorySummarizer;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -26,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 职责：基于 Redis 实现 Spring AI 的会话记忆仓储，统一使用 conversationKey(type:chatId) 作为会话标识。
@@ -41,20 +44,24 @@ import java.util.Set;
 public class RedisChatMemoryRepository implements ChatMemoryRepository {
 
     private static final String KEY_PREFIX = "ai:chat:msgs:";
+    private static final String WRITE_LOCK_PREFIX = "ai:chat:lock:write:";
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final ChatArchiveFacadeService chatArchiveFacadeService;
     private final ChatMemorySummarizer chatMemorySummarizer;
+    private final RedissonClient redissonClient;
 
     public RedisChatMemoryRepository(StringRedisTemplate redisTemplate,
                                      ObjectMapper objectMapper,
                                      ChatArchiveFacadeService chatArchiveFacadeService,
-                                     ChatMemorySummarizer chatMemorySummarizer) {
+                                     ChatMemorySummarizer chatMemorySummarizer,
+                                     RedissonClient redissonClient) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.chatArchiveFacadeService = chatArchiveFacadeService;
         this.chatMemorySummarizer = chatMemorySummarizer;
+        this.redissonClient = redissonClient;
     }
 
     /**
@@ -146,20 +153,24 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
                 messageJsonList.add(objectMapper.writeValueAsString(storedMessage));
             }
 
-            // 覆盖写入：saveAll 是窗口全量快照，先删旧 list 再按顺序写新 list。
-            redisTemplate.delete(redisKey);
-
-            // 顺序保证：按集合顺序逐条 RPUSH，Redis list 从左到右即时间先后。
-            // 相当于redis命令 rpush redisKey messageJsonList
-            redisTemplate.opsForList().rightPushAll(redisKey, messageJsonList);
+            // 会话写锁：与异步压缩写回共用同一把锁，避免同会话写入相互覆盖。
+            RLock writeLock = redissonClient.getLock(buildWriteLockKey(conversationKey));
+            boolean locked = false;
+            try {
+                locked = writeLock.tryLock(2, 15, TimeUnit.SECONDS);
+                if (!locked) {
+                    log.warn("Skip redis saveAll due to lock timeout. conversationKey={}", conversationKey);
+                    return;
+                }
+                overwriteRedisList(redisKey, messageJsonList);
+            } finally {
+                if (locked && writeLock.isHeldByCurrentThread()) {
+                    writeLock.unlock();
+                }
+            }
 
             // 双写顺序：先写 Redis（主链路记忆源），再写 MySQL（完整归档），避免归档成功但记忆缺失。
             archiveToMysqlFailSafe(conversationKey, deduplicated);
-
-/*            for (String messageJson : messageJsonList) {
-                 相当于redis命令 rpush redisKey messageJson
-                redisTemplate.opsForList().rightPush(redisKey, messageJson);
-            }*/
 
             // 滚雪球摘要算法(Rolling Summarization): 独立Service规避AOP失效，融合历史摘要与最老对话，实现无限上下文记忆。
             // 仅当最后一条为 AssistantMessage（本轮闭环完成）时才触发压缩，避免 UserMessage 半闭环阶段误压缩。
@@ -169,6 +180,9 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
 
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize chat messages to redis", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while acquiring redis write lock", e);
         }
     }
 
@@ -389,4 +403,26 @@ public class RedisChatMemoryRepository implements ChatMemoryRepository {
     private record StoredMessage(String messageType, String text, String createdAt, Map<String, Object> metadata) {
     }
 
+    /**
+     * 关键步骤：
+     * 1) 使用 delete + rpushall 覆盖会话消息快照；
+     * 2) 仅在存在消息时写入，避免生成空 list。
+     * 异常处理：Redis 异常继续上抛，由调用方处理。
+     */
+    private void overwriteRedisList(String redisKey, List<String> messageJsonList) {
+        // 覆盖写入：saveAll 是窗口全量快照，先删旧 list 再按顺序写新 list。
+        redisTemplate.delete(redisKey);
+        if (!messageJsonList.isEmpty()) {
+            // 顺序保证：按集合顺序逐条 RPUSH，Redis list 从左到右即时间先后。
+            redisTemplate.opsForList().rightPushAll(redisKey, messageJsonList);
+        }
+    }
+
+    /**
+     * 关键步骤：基于 conversationKey 生成会话级写锁 key。
+     * 异常处理：conversationKey 非法时由 normalizeConversationKey 抛错。
+     */
+    private String buildWriteLockKey(String conversationKey) {
+        return WRITE_LOCK_PREFIX + normalizeConversationKey(conversationKey);
+    }
 }

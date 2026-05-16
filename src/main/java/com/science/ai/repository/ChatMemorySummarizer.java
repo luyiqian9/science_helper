@@ -1,4 +1,4 @@
-package com.science.ai.service.chat;
+package com.science.ai.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,13 +1,13 @@
-package com.science.ai.tools;
+package com.science.ai.service.agent.tools;
 
 import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.science.ai.entity.po.Course;
 import com.science.ai.entity.po.CourseReservation;
 import com.science.ai.entity.po.School;
 import com.science.ai.entity.query.CourseQuery;
-import com.science.ai.service.funcall.ICourseReservationService;
-import com.science.ai.service.funcall.ICourseService;
-import com.science.ai.service.funcall.ISchoolService;
+import com.science.ai.service.agent.tools.inter.ICourseReservationService;
+import com.science.ai.service.agent.tools.inter.ICourseService;
+import com.science.ai.service.agent.tools.inter.ISchoolService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;

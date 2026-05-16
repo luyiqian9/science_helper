@@ -1,7 +1,9 @@
 package com.science.ai.config.llm;
 
+import com.science.ai.constants.SystemConstants;
 import com.science.ai.model.AlibabaOpenAiChatModel;
 import com.science.ai.repository.redis.RedisChatMemoryRepository;
+import com.science.ai.service.agent.tools.CourseTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -9,7 +11,9 @@ import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvi
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.SimpleVectorStore;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -60,6 +64,23 @@ public class ClientConfig {
                         new SimpleLoggerAdvisor(1)  // 配置日志
                 )
                 .build();
+    }
+
+    @Bean
+    public ChatClient agentChatClient(OpenAiChatModel model, ChatMemory chatMemory, CourseTools courseTools) {
+        return ChatClient.builder(model)
+                .defaultSystem(SystemConstants.AGENT_SYSTEM_PROMPT)
+                .defaultAdvisors(
+                        MessageChatMemoryAdvisor.builder(chatMemory).build(),  // 配置会话记忆
+                        new SimpleLoggerAdvisor()  // 配置日志
+                )
+                .defaultTools(courseTools)
+                .build();
+    }
+
+    @Bean
+    public VectorStore vectorStore(OpenAiEmbeddingModel embeddingModel) {
+        return SimpleVectorStore.builder(embeddingModel).build();
     }
 
     @Bean

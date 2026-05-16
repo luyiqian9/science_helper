@@ -3,7 +3,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.science.ai.repository.mysql.ChatArchiveRepository;
 import com.science.ai.service.archive.ChatArchiveFacadeService;
-import com.science.ai.service.chat.ChatMemorySummarizer;
+import com.science.ai.repository.ChatMemorySummarizer;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;

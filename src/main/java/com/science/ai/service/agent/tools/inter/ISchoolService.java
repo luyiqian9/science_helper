@@ -1,4 +1,4 @@
-package com.science.ai.service.funcall;
+package com.science.ai.service.agent.tools.inter;
 
 import com.science.ai.entity.po.School;
 import com.baomidou.mybatisplus.extension.service.IService;

@@ -1,4 +1,4 @@
-package com.science.ai.strategy;
+package com.science.ai.service.chat.strategy;
 
 import reactor.core.publisher.Flux;
 

@@ -1,6 +1,6 @@
 package com.science.ai.controller;
 import com.science.ai.constants.RoleTypeConstants;
-import com.science.ai.service.AcademicAgentService;
+import com.science.ai.service.chat.strategy.AcademicAgentService;
 import com.science.ai.service.chat.ChatService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.RequestMapping;

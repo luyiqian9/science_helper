@@ -1,7 +1,6 @@
-package com.science.ai.service;
+package com.science.ai.service.chat.strategy;
 
 import com.science.ai.repository.redis.ChatHistoryRepo;
-import com.science.ai.strategy.AcademicAgentStrategy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 

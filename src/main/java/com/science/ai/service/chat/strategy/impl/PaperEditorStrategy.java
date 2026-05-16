@@ -1,6 +1,7 @@
-package com.science.ai.strategy;
+package com.science.ai.service.chat.strategy.impl;
 
 import com.science.ai.constants.RoleTypeConstants;
+import com.science.ai.service.chat.strategy.AcademicAgentStrategy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;

@@ -1,7 +1,6 @@
 package com.science.ai.config.llm;
 import com.science.ai.constants.SystemConstants;
 import com.science.ai.model.AlibabaOpenAiChatModel;
-import com.science.ai.tools.CourseTools;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -13,10 +12,7 @@ import org.springframework.ai.model.openai.autoconfigure.OpenAiChatProperties;
 import org.springframework.ai.model.openai.autoconfigure.OpenAiConnectionProperties;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiEmbeddingModel;
 import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -59,12 +55,6 @@ public class CommonConfiguration {
         return chatModel;
     }
 
-
-    @Bean
-    public VectorStore vectorStore(OpenAiEmbeddingModel embeddingModel) {
-        return SimpleVectorStore.builder(embeddingModel).build();
-    }
-
 //    @Bean
 //    public ChatClient chatClient(OllamaChatModel model, ChatMemory chatMemory) {
     public ChatClient chatClient(AlibabaOpenAiChatModel model, ChatMemory chatMemory) {
@@ -86,18 +76,6 @@ public class CommonConfiguration {
                         MessageChatMemoryAdvisor.builder(chatMemory).build(),  // 配置会话记忆
                         new SimpleLoggerAdvisor()  // 配置日志
                 )
-                .build();
-    }
-
-    @Bean
-    public ChatClient serviceChatClient(OpenAiChatModel model, ChatMemory chatMemory, CourseTools courseTools) {
-        return ChatClient.builder(model)
-                .defaultSystem(SystemConstants.SERVICE_SYSTEM_PROMPT)
-                .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),  // 配置会话记忆
-                        new SimpleLoggerAdvisor()  // 配置日志
-                )
-                .defaultTools(courseTools)
                 .build();
     }
 
